@@ -22,7 +22,7 @@ from ai_exercise.models import (
     LoadDocumentsOutput,
 )
 from ai_exercise.retrieval.retrieval import get_relevant_chunks
-from ai_exercise.retrieval.vector_store import create_collection
+from ai_exercise.retrieval.vector_store import create_collection, reset_collection
 
 collection = create_collection(
     chroma_client, llm_provider.embedding_function, SETTINGS.collection_name
@@ -32,21 +32,19 @@ collection = create_collection(
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Load all documents into the vector store on startup."""
-    if collection.count() > 0:
-        print(
-            "Collection already contains "
-            f"{collection.count()} documents. Skipping load."
-        )
-    else:
-        print("Loading documents from StackOne OpenAPI specs...")
-        json_data = get_json_data()
-        print(f"Fetched {len(json_data)} specs. Building docs...")
-        documents = build_docs(json_data)
-        print(f"Built {len(documents)} documents. Splitting...")
-        documents = split_docs(documents)
-        print(f"Split into {len(documents)} chunks. Adding to vector store...")
-        add_documents(collection, documents)
-        print(f"Done. Number of documents in collection: {collection.count()}")
+    print("Loading documents from StackOne OpenAPI specs...")
+    json_data = get_json_data()
+    print(f"Fetched {len(json_data)} specs. Building docs...")
+    documents = build_docs(json_data)
+    print(f"Built {len(documents)} documents. Splitting...")
+    documents = split_docs(documents)
+    print(f"Split into {len(documents)} chunks. Resetting collection and adding...")
+    global collection
+    collection = reset_collection(
+        chroma_client, llm_provider.embedding_function, SETTINGS.collection_name
+    )
+    add_documents(collection, documents)
+    print(f"Done. Number of documents in collection: {collection.count()}")
     yield
 
 
