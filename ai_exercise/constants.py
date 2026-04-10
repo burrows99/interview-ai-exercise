@@ -40,8 +40,16 @@ class Settings(BaseSettings):
     chunk_size: int = 1000
     k_neighbors: int = 5
 
-    # You will want to point towards all of the specs not just this one
-    docs_url: str = "https://docs.stackone.com/openapi/646b2d607eeee7006f8898bf"
+    # All StackOne OpenAPI specs to load
+    docs_urls: list[str] = [
+        "https://api.eu1.stackone.com/oas/stackone.json",
+        "https://api.eu1.stackone.com/oas/hris.json",
+        "https://api.eu1.stackone.com/oas/ats.json",
+        "https://api.eu1.stackone.com/oas/lms.json",
+        "https://api.eu1.stackone.com/oas/iam.json",
+        "https://api.eu1.stackone.com/oas/crm.json",
+        "https://api.eu1.stackone.com/oas/marketing.json",
+    ]
 
 
 SETTINGS = Settings()  # type: ignore

@@ -12,13 +12,15 @@ from ai_exercise.loading.chunk_json import chunk_data
 from ai_exercise.models import Document
 
 
-def get_json_data() -> dict[str, Any]:
-    # Send a GET request to the URL specified in SETTINGS.DOCS_URL
-    response = requests.get(SETTINGS.docs_url)
-    json_data = response.json()
-    response.raise_for_status()
-
-    return json_data
+def get_json_data() -> list[dict[str, Any]]:
+    # Send a GET request to each URL specified in SETTINGS.docs_urls
+    results = []
+    for url in SETTINGS.docs_urls:
+        print(f"Fetching {url}...")
+        response = requests.get(url)
+        response.raise_for_status()
+        results.append(response.json())
+    return results
 
 
 def document_json_array(data: list[dict[str, Any]], source: str) -> list[Document]:
@@ -29,12 +31,13 @@ def document_json_array(data: list[dict[str, Any]], source: str) -> list[Documen
     ]
 
 
-def build_docs(data: dict[str, Any]) -> list[Document]:
+def build_docs(data: list[dict[str, Any]]) -> list[Document]:
     """Chunk (badly) and convert the JSON data into a list of Document objects."""
     docs = []
-    for attribute in ["paths", "webhooks", "components"]:
-        chunks = chunk_data(data, attribute)
-        docs.extend(document_json_array(chunks, attribute))
+    for spec in data:
+        for attribute in ["paths", "webhooks", "components"]:
+            chunks = chunk_data(spec, attribute)
+            docs.extend(document_json_array(chunks, attribute))
     return docs
 
 

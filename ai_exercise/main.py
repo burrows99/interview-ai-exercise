@@ -1,5 +1,7 @@
 """FastAPI app creation, main API routes."""
 
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 
 from ai_exercise.constants import SETTINGS, chroma_client, llm_provider
@@ -19,11 +21,27 @@ from ai_exercise.models import (
 from ai_exercise.retrieval.retrieval import get_relevant_chunks
 from ai_exercise.retrieval.vector_store import create_collection
 
-app = FastAPI()
-
 collection = create_collection(
     chroma_client, llm_provider.embedding_function, SETTINGS.collection_name
 )
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Load all documents into the vector store on startup."""
+    print("Loading documents from StackOne OpenAPI specs...")
+    json_data = get_json_data()
+    print(f"Fetched {len(json_data)} specs. Building docs...")
+    documents = build_docs(json_data)
+    print(f"Built {len(documents)} documents. Splitting...")
+    documents = split_docs(documents)
+    print(f"Split into {len(documents)} chunks. Adding to vector store...")
+    add_documents(collection, documents)
+    print(f"Done. Number of documents in collection: {collection.count()}")
+    yield
+
+
+app = FastAPI(lifespan=lifespan)
 
 
 @app.get("/health")
