@@ -2,9 +2,8 @@
 
 from fastapi import FastAPI
 
-from ai_exercise.constants import SETTINGS, chroma_client, openai_client
-from ai_exercise.llm.completions import create_prompt, get_completion
-from ai_exercise.llm.embeddings import openai_ef
+from ai_exercise.constants import SETTINGS, chroma_client, llm_provider
+from ai_exercise.llm.completions import create_prompt
 from ai_exercise.loading.document_loader import (
     add_documents,
     build_docs,
@@ -22,7 +21,9 @@ from ai_exercise.retrieval.vector_store import create_collection
 
 app = FastAPI()
 
-collection = create_collection(chroma_client, openai_ef, SETTINGS.collection_name)
+collection = create_collection(
+    chroma_client, llm_provider.embedding_function, SETTINGS.collection_name
+)
 
 
 @app.get("/health")
@@ -62,12 +63,8 @@ def chat_route(chat_query: ChatQuery) -> ChatOutput:
 
     print(f"Prompt: {prompt}")
 
-    # Get completion from LLM
-    result = get_completion(
-        client=openai_client,
-        prompt=prompt,
-        model=SETTINGS.openai_model,
-    )
+    # Get completion from LLM provider
+    result = llm_provider.get_completion(prompt)
 
     return ChatOutput(message=result)
 

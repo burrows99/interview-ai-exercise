@@ -1,9 +1,10 @@
 """Set up some constants for the project."""
 
 import chromadb
-from openai import OpenAI
 from pydantic import SecretStr
 from pydantic_settings import BaseSettings
+
+from ai_exercise.llm.provider import LLMProvider, create_provider
 
 
 class Settings(BaseSettings):
@@ -22,9 +23,18 @@ class Settings(BaseSettings):
 
         env_file = ".env"
 
-    openai_api_key: SecretStr
+    # Provider selection: "openai" or "ollama"
+    provider: str = "ollama"
+
+    # OpenAI settings
+    openai_api_key: SecretStr = SecretStr("")
     openai_model: str = "gpt-4o"
     embeddings_model: str = "text-embedding-3-small"
+
+    # Ollama settings
+    ollama_base_url: str = "http://localhost:11434"
+    ollama_model: str = "gpt-oss:120b-cloud"
+    ollama_embeddings_model: str = "nomic-embed-text"
 
     collection_name: str = "documents"
     chunk_size: int = 1000
@@ -36,7 +46,14 @@ class Settings(BaseSettings):
 
 SETTINGS = Settings()  # type: ignore
 
+llm_provider: LLMProvider = create_provider(
+    provider=SETTINGS.provider,
+    openai_api_key=SETTINGS.openai_api_key.get_secret_value(),
+    openai_model=SETTINGS.openai_model,
+    embeddings_model=SETTINGS.embeddings_model,
+    ollama_base_url=SETTINGS.ollama_base_url,
+    ollama_model=SETTINGS.ollama_model,
+    ollama_embeddings_model=SETTINGS.ollama_embeddings_model,
+)
 
-# clients
-openai_client = OpenAI(api_key=SETTINGS.openai_api_key.get_secret_value())
 chroma_client = chromadb.PersistentClient(path="./.chroma_db")
