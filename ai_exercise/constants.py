@@ -39,6 +39,7 @@ class Settings(BaseSettings):
     collection_name: str = "documents"
     chunk_size: int = 1000
     k_neighbors: int = 5
+    distance_threshold: float = 1.0  # Chroma L2/cosine distance; chunks above this are considered irrelevant
 
     # All StackOne OpenAPI specs to load
     docs_urls: list[str] = [
