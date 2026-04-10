@@ -29,15 +29,18 @@ collection = create_collection(
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Load all documents into the vector store on startup."""
-    print("Loading documents from StackOne OpenAPI specs...")
-    json_data = get_json_data()
-    print(f"Fetched {len(json_data)} specs. Building docs...")
-    documents = build_docs(json_data)
-    print(f"Built {len(documents)} documents. Splitting...")
-    documents = split_docs(documents)
-    print(f"Split into {len(documents)} chunks. Adding to vector store...")
-    add_documents(collection, documents)
-    print(f"Done. Number of documents in collection: {collection.count()}")
+    if collection.count() > 0:
+        print(f"Collection already contains {collection.count()} documents. Skipping load.")
+    else:
+        print("Loading documents from StackOne OpenAPI specs...")
+        json_data = get_json_data()
+        print(f"Fetched {len(json_data)} specs. Building docs...")
+        documents = build_docs(json_data)
+        print(f"Built {len(documents)} documents. Splitting...")
+        documents = split_docs(documents)
+        print(f"Split into {len(documents)} chunks. Adding to vector store...")
+        add_documents(collection, documents)
+        print(f"Done. Number of documents in collection: {collection.count()}")
     yield
 
 
