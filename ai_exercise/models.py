@@ -35,3 +35,19 @@ class ChatOutput(BaseModel):
     """Model for the chat route output."""
 
     message: str
+
+
+class EvaluateQuery(BaseModel):
+    """Input for the evaluate route."""
+
+    query: str
+
+
+class EvaluationResult(BaseModel):
+    """Scores returned by the evaluation route."""
+
+    query: str
+    answer: str
+    faithfulness: float
+    answer_relevancy: float
+    context_relevancy: float

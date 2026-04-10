@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from ai_exercise.constants import SETTINGS, chroma_client, llm_provider
+from ai_exercise.evaluation.evaluator import evaluate
 from ai_exercise.llm.completions import create_prompt
 from ai_exercise.loading.document_loader import (
     add_documents,
@@ -15,6 +16,8 @@ from ai_exercise.loading.document_loader import (
 from ai_exercise.models import (
     ChatOutput,
     ChatQuery,
+    EvaluateQuery,
+    EvaluationResult,
     HealthRouteOutput,
     LoadDocumentsOutput,
 )
@@ -30,7 +33,10 @@ collection = create_collection(
 async def lifespan(app: FastAPI):
     """Load all documents into the vector store on startup."""
     if collection.count() > 0:
-        print(f"Collection already contains {collection.count()} documents. Skipping load.")
+        print(
+            "Collection already contains "
+            f"{collection.count()} documents. Skipping load."
+        )
     else:
         print("Loading documents from StackOne OpenAPI specs...")
         json_data = get_json_data()
@@ -88,6 +94,32 @@ def chat_route(chat_query: ChatQuery) -> ChatOutput:
     result = llm_provider.get_completion(prompt)
 
     return ChatOutput(message=result)
+
+
+@app.post("/evaluate")
+def evaluate_route(eval_query: EvaluateQuery) -> EvaluationResult:
+    """Run the RAG pipeline and evaluate the result with LLM-as-judge metrics."""
+    relevant_chunks = get_relevant_chunks(
+        collection=collection, query=eval_query.query, k=SETTINGS.k_neighbors
+    )
+
+    prompt = create_prompt(query=eval_query.query, context=relevant_chunks)
+    answer = llm_provider.get_completion(prompt)
+
+    scores = evaluate(
+        llm=llm_provider,
+        query=eval_query.query,
+        context=relevant_chunks,
+        answer=answer,
+    )
+
+    print(f"Evaluation scores for '{eval_query.query}': {scores}")
+
+    return EvaluationResult(
+        query=eval_query.query,
+        answer=answer,
+        **scores,
+    )
 
 
 if __name__ == "__main__":
