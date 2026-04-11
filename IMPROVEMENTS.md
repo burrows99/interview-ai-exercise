@@ -10,6 +10,43 @@
 
 ---
 
+## Baseline Eval Results (evidence)
+
+The evaluation system (`evals.py`) was run over the 5 sample questions from the assignment spec. Results from `evals/experiments/experiment_20260411_094226.csv`:
+
+| Query | Faithfulness | Ans Relevancy | Ctx Relevancy | Correctness |
+|---|---|---|---|---|
+| How do you authenticate to the StackOne API? | 0.75 | 0.95 | **0.33** | fail |
+| Can I retrieve all linked accounts with workday provider? | 0.50 | 1.00 | 0.95 | fail |
+| What is the default expiry of the session token? | 1.00 | 0.90 | **0.00** | fail |
+| What fields must be sent to create a course on an LMS? | 1.00 | 0.20 | **0.00** | fail |
+| What is the response body when listing an employee? | 1.00 | 0.90 | 0.80 | fail |
+| **AVERAGES** | **0.85** | **0.79** | **0.42** | **0/5 (0%)** |
+
+### What the numbers reveal
+
+**Q3 & Q4 — `context_relevancy: 0.00`**  
+No chunks passed the `score_threshold: 0.5` filter — retrieval returned nothing. The model correctly admitted it didn't know (hence `faithfulness: 1.00`), but the questions went unanswered. The session token expiry and LMS course required fields *do exist* in the specs, but are buried inside nested JSON schema definitions that were severed from their parent endpoint by the character-boundary splitter. This directly motivates **Improvement #1 (whole-document indexing)**.
+
+**Q1 — `context_relevancy: 0.33`**  
+The query "authenticate" semantically matched the `POST /connect_sessions/authenticate` endpoint (a session-creation flow) instead of the API key / `Authorization` header docs. The embedding model conflated two distinct authentication concepts. BM25 would have ranked documents containing the literal string "api-key" or "x-api-key" header at the top instead. This directly motivates **Improvement #1 (BM25)**.
+
+**Q2 — `faithfulness: 0.50`**  
+The answer described `GET /accounts` correctly but omitted provider-level filtering. The Workday filter is a query parameter whose description was not present in any retrieved chunk — again a retrieval completeness problem, not a generation problem.
+
+**All correctness = fail — a genuine red flag**  
+Four of the five failures are real, not a grader artefact:
+
+- **Q1** retrieved the wrong auth docs → answer describes the wrong mechanism → correctly judged as fail  
+- **Q2** answer omits provider filtering entirely → correctly judged as fail  
+- **Q3 & Q4** retrieval returned nothing → model said "I don't know" → correctly judged as fail  
+
+**Q5 is the only possible grader calibration issue** — it scores faithfulness 1.0, answer relevancy 0.9, context relevancy 0.8, and the answer appears substantively correct. A 0/5 pass rate with 4 legitimate failures is a clear signal that the retrieval system cannot reliably answer the assignment's own sample questions. This is the primary motivation for every improvement listed below.
+
+**0.42 average context relevancy** is the headline signal: retrieval quality is the bottleneck, not generation.
+
+---
+
 ## Suggested Improvements
 
 ### 1. ⭐ Vectorless RAG — Page-Level Index (BM25 / Full-Text) *(recommended first step)*

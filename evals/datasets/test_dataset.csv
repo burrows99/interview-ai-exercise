@@ -1,0 +1,6 @@
+query,grading_notes
+How do you authenticate to the StackOne API?,"Should mention API key / bearer token authentication, x-api-key header or Authorization header, and ideally mention obtaining keys from the StackOne dashboard."
+Can I retrieve all linked accounts with workday provider?,"Should describe listing or filtering linked accounts by provider (e.g. Workday), referring to the stackone or HRIS linked-accounts endpoint."
+What is the default expiry of the session token?,"Should state a specific duration (e.g. 60 minutes / 1 hour) for session token expiry, or clearly state the value from the spec."
+What fields must be sent to create a course on an LMS?,"Should list required fields such as title and/or other mandatory parameters for the POST /lms/courses endpoint."
+What is the response body when listing an employee?,"Should describe the fields returned in the employee object (e.g. id, first_name, last_name, email, employment details) from the HRIS list employees endpoint."

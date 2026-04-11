@@ -9,3 +9,17 @@ services:
       - .env
     volumes:
       - ./ai_exercise:/code/ai_exercise
+      - ./.chroma_db:/code/.chroma_db
+
+  evals:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    volumes:
+      - ./ai_exercise:/code/ai_exercise
+      - ./evals:/code/evals
+      - ./evals.py:/code/evals.py
+      - ./.chroma_db:/code/.chroma_db
+    command: ["uv", "run", "python", "evals.py"]

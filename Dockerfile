@@ -23,6 +23,8 @@ RUN uv pip compile pyproject.toml -o requirements.txt && \
 
 # Copy application code
 COPY ai_exercise ./ai_exercise
+COPY evals.py ./
+COPY evals ./evals
 
 # Expose port
 EXPOSE 80

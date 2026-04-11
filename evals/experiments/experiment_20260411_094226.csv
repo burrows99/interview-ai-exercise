@@ -1,0 +1,38 @@
+query,answer,faithfulness,answer_relevancy,context_relevancy,correctness,retrieved_chunks
+How do you authenticate to the StackOne API?,"Authentication is performed through the **POST /​connect_sessions/authenticate** endpoint.  
+You must send a JSON request body (the *ConnectSessionAuthenticate* schema) containing the required authentication parameters. The request body is required, and the endpoint will return a session (or token) that you can use for subsequent API calls.",0.75,0.95,0.33,fail,"Path: POST /connect_sessions/authenticate
+{""requestBody"": {""required"": true, ""description"": ""The par | } | } | Path: GET /accounts/{id}
+{""parameters"": [{""name"": ""id"", ""required"": true, ""in"": ""path"", ""schema"": {"" | Path: PATCH /accounts/{id}
+{""parameters"": [{""name"": ""id"", ""required"": true, ""in"": ""path"", ""schema"": "
+Can I retrieve all linked accounts with workday provider?,"Yes. The **GET /accounts** endpoint returns the full list of linked accounts (an array of `LinkedAccount` objects). It doesn’t require any parameters, so a single call will give you every linked account that exists in your tenant.
+
+The API does not provide a query‑parameter to filter by provider (e.g., “Workday”), so if you only need the Workday accounts you’ll have to:
+
+1. Call **GET /accounts** to get the complete list.  
+2. Inspect each `LinkedAccount` object for its provider field (e.g., `""provider"": ""workday""`).  
+3. Keep only the items where the provider matches “workday”.
+
+So you can retrieve all linked accounts in one request, and then filter client‑side for the Workday provider.",0.5,1.0,0.95,fail,"Path: GET /accounts
+{""parameters"": [], ""responses"": {""description"": ""The list of accounts was retrie | Path: GET /unified/hris/employees
+{""parameters"": [{""name"": ""x-account-id"", ""in"": ""header"", ""descript | Path: GET /unified/crm/accounts
+{""parameters"": [{""name"": ""x-account-id"", ""in"": ""header"", ""descriptio | Path: GET /unified/hris/employments
+{""parameters"": [{""name"": ""x-account-id"", ""in"": ""header"", ""descri | Path: GET /accounts/{id}
+{""parameters"": [{""name"": ""id"", ""required"": true, ""in"": ""path"", ""schema"": {"""
+What is the default expiry of the session token?,The provided documentation does not specify the default expiry of the session token.,1.0,0.9,0.0,fail,"} | } | Path: DELETE /mcp
+Description: Close an existing MCP session for the provided session id
+{""descripti | Path: POST /connect_sessions/authenticate
+{""requestBody"": {""required"": true, ""description"": ""The par | Path: POST /connect_sessions
+{""requestBody"": {""required"": true, ""content"": {""application/json"": {""sc"
+What fields must be sent to create a course on an LMS?,"The provided documentation does not include a definition of the request body or the required fields for creating a course learning object, so I can’t determine which fields must be sent. This information is not present in the given context.",1.0,0.2,0.0,fail,"Path: GET /unified/lms/courses
+Description: Retrieve a list of course type learning objects. 
+
+These | Path: GET /unified/lms/assignments
+Description: Retrieve a list of assignment type learning records. | Path: PUT /unified/lms/content
+Description: Create or update an external linking learning object tha | Path: GET /unified/ats/custom_field_definitions/candidates
+{""parameters"": [{""name"": ""x-account-id"",  | Path: GET /unified/lms/courses/{id}
+Description: Retrieve a course type learning object by its ident"
+What is the response body when listing an employee?,"When you call **GET /unified/hris/employees**, the API returns a JSON payload whose shape is defined by the **`EmployeesPaginated`** schema. In other words, the response body is an *application/json* object that contains a paginated list of employee records (as described by the `EmployeesPaginated` model).",1.0,0.9,0.8,fail,"Path: GET /unified/hris/employees
+{""parameters"": [{""name"": ""x-account-id"", ""in"": ""header"", ""descript | }], ""responses"": {""description"": ""The document related to the employee with the given identifiers wa | Path: GET /unified/hris/documents/employee_categories
+{""parameters"": [{""name"": ""x-account-id"", ""in"": | Path: GET /unified/hris/documents/employee_categories/{id}
+{""parameters"": [{""name"": ""x-account-id"",  | Path: GET /unified/hris/employees/{id}/employments
+{""parameters"": [{""name"": ""x-account-id"", ""in"": ""h"

@@ -1,0 +1,36 @@
+query,answer,faithfulness,answer_relevancy,context_relevancy,correctness,retrieved_chunks
+How do you authenticate to the StackOne API?,"To authenticate you use the **`POST /connect_sessions/authenticate`** endpoint.
+
+Send a POST request to `/connect_sessions/authenticate` with a JSON request body that conforms to the **`ConnectSessionAuthenticate`** schema (the exact fields are defined by that schema). The request body is required, and the endpoint will return the authentication credentials needed for subsequent API calls.",0.8,0.95,0.33,fail,"Path: POST /connect_sessions/authenticate
+{""requestBody"": {""required"": true, ""description"": ""The par | } | } | Path: GET /accounts/{id}
+{""parameters"": [{""name"": ""id"", ""required"": true, ""in"": ""path"", ""schema"": {"" | Path: PATCH /accounts/{id}
+{""parameters"": [{""name"": ""id"", ""required"": true, ""in"": ""path"", ""schema"": "
+Can I retrieve all linked accounts with workday provider?,"I’m sorry, but the provided documentation does not contain any information about filtering linked accounts by provider (e.g., Workday). It only describes a general **GET /accounts** endpoint that returns all linked accounts, without mentioning provider‑specific query parameters or capabilities. Therefore, based on the given context, I can’t confirm whether you can retrieve all linked accounts specifically for the Workday provider.",1.0,0.93,0.7,fail,"Path: GET /accounts
+{""parameters"": [], ""responses"": {""description"": ""The list of accounts was retrie | Path: GET /unified/hris/employees
+{""parameters"": [{""name"": ""x-account-id"", ""in"": ""header"", ""descript | Path: GET /unified/crm/accounts
+{""parameters"": [{""name"": ""x-account-id"", ""in"": ""header"", ""descriptio | Path: GET /unified/hris/employments
+{""parameters"": [{""name"": ""x-account-id"", ""in"": ""header"", ""descri | Path: GET /accounts/{id}
+{""parameters"": [{""name"": ""id"", ""required"": true, ""in"": ""path"", ""schema"": {"""
+What is the default expiry of the session token?,The provided documentation does not specify the default expiry time for a session token.,1.0,0.8,0.0,fail,"} | } | Path: DELETE /mcp
+Description: Close an existing MCP session for the provided session id
+{""descripti | Path: POST /connect_sessions/authenticate
+{""requestBody"": {""required"": true, ""description"": ""The par | Path: POST /connect_sessions
+{""requestBody"": {""required"": true, ""content"": {""application/json"": {""sc"
+What fields must be sent to create a course on an LMS?,"The provided documentation does not include any information about the request body or required fields for creating a course in the LMS. It only describes endpoints for retrieving courses and other objects, and for creating/updating external linking content. Therefore, based on the given context, I cannot specify which fields are required to create a course.",1.0,0.3,0.0,fail,"Path: GET /unified/lms/courses
+Description: Retrieve a list of course type learning objects. 
+
+These | Path: GET /unified/lms/assignments
+Description: Retrieve a list of assignment type learning records. | Path: PUT /unified/lms/content
+Description: Create or update an external linking learning object tha | Path: GET /unified/ats/custom_field_definitions/candidates
+{""parameters"": [{""name"": ""x-account-id"",  | Path: GET /unified/lms/courses/{id}
+Description: Retrieve a course type learning object by its ident"
+What is the response body when listing an employee?,"When you call **GET /unified/hris/employees** the API returns a JSON payload that conforms to the **`EmployeesPaginated`** schema.
+
+- **Content‑Type:** `application/json`
+- **Schema:** `#/components/schemas/EmployeesPaginated`
+
+So the response body is a JSON object (with pagination fields such as `page`, `pageSize`, `total`, etc.) that contains the collection of employee records as defined in the **EmployeesPaginated** model. The exact structure of that model isn’t shown in the excerpt, but it is the shape of the JSON returned for the list‑employees endpoint.",0.9,0.95,0.85,fail,"Path: GET /unified/hris/employees
+{""parameters"": [{""name"": ""x-account-id"", ""in"": ""header"", ""descript | }], ""responses"": {""description"": ""The document related to the employee with the given identifiers wa | Path: GET /unified/hris/documents/employee_categories
+{""parameters"": [{""name"": ""x-account-id"", ""in"": | Path: GET /unified/hris/documents/employee_categories/{id}
+{""parameters"": [{""name"": ""x-account-id"",  | Path: GET /unified/hris/employees/{id}/employments
+{""parameters"": [{""name"": ""x-account-id"", ""in"": ""h"
