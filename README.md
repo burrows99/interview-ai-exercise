@@ -5,29 +5,40 @@
 ## Requirements
 
 - [Docker Engine](https://docs.docker.com/engine/install/)
+- [Ollama Desktop](https://ollama.com/download)
 
 ## Hardware
 
-The default setup runs `llama3.2` (3B, ~2GB) and `nomic-embed-text` via Ollama, which fits comfortably within a standard M3 MacBook Pro with 16GB RAM.
+The default setup uses `gpt-oss:120b-cloud` via Ollama Desktop (cloud-hosted, no local GPU required) and `nomic-embed-text` for embeddings.
 
-If you'd prefer to use OpenAI instead (e.g. for a more capable model or on machines with less RAM), set the following in `.env`:
+If you'd prefer to use OpenAI instead, set the following in `.env`:
 
 ```env
 PROVIDER=openai
 OPENAI_API_KEY=<your-key>
 ```
 
-The `ollama` container will still start but won't be used.
+## Ollama Desktop Setup
+
+1. Download and install [Ollama Desktop](https://ollama.com/download)
+2. Sign in to your Ollama account in the app
+3. Pull the embeddings model:
+
+```bash
+ollama pull nomic-embed-text
+```
+
+The chat model (`gpt-oss:120b-cloud`) is cloud-hosted and does not need to be pulled separately — it will be used automatically once you're signed in.
 
 ## Setup
 
-Start everything (Ollama + model downloads + API):
+Start the API:
 
 ```bash
 docker-compose up -d
 ```
 
-That's it. The API and Ollama container will start, models will be pulled automatically, and the API will be ready once models are loaded.
+The API connects to your local Ollama Desktop instance automatically.
 
 ## Usage
 
