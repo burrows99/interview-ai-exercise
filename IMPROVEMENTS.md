@@ -4,9 +4,7 @@
 
 | Area | Problem |
 |---|---|
-| Chunking | Fixed-size `RecursiveCharacterTextSplitter` splits mid-schema, breaking semantic units |
 | Retrieval | Pure vector/cosine search misses exact keyword matches (e.g. `GET /hris/employees`) |
-| Context | No query rewriting — poorly phrased questions return irrelevant chunks |
 | Evaluation | LLM-as-judge scores are reference-free; no regression tracking over time |
 | Observability | No visibility into retrieval quality per query; scores not tracked over time |
 
@@ -14,66 +12,41 @@
 
 ## Suggested Improvements
 
-### 1. Smarter Chunking — Schema-Aware Splitting
-**Current drawback:** `RecursiveCharacterTextSplitter` cuts at character boundaries, so a single endpoint's parameters, request body, and response schemas are split across multiple chunks. The LLM sees incomplete context and cannot reason about the full contract.
+### 1. ⭐ Vectorless RAG — Page-Level Index (BM25 / Full-Text) *(recommended first step)*
 
-**How it helps:** Splitting per OpenAPI operation keeps all the information the LLM needs in a single unit — one complete, self-contained operation is retrieved instead of several partial fragments, eliminating the need to infer missing parts.
+**Current drawback:** The system splits OpenAPI operations into fixed-size text chunks, embeds each chunk as a dense vector, and retrieves by cosine similarity. This creates three compounding problems:
 
-Instead, split per OpenAPI operation (one chunk = one endpoint + its parameters + response schema). This preserves semantic units and prevents context bleed between unrelated endpoints.
+1. **Chunking artifacts degrade response accuracy.** `RecursiveCharacterTextSplitter` cuts at character boundaries, not semantic ones. A single endpoint's summary, parameters, request body, and response schemas are split across multiple chunks. The LLM only ever sees a fragment of the contract — it cannot reason about required fields, response shapes, or error codes from a truncated chunk. LangChain's own RAG analysis found chunk size to be one of the highest-leverage tuning parameters precisely because incomplete chunks directly cause incomplete or incorrect answers. ([LangChain — Deconstructing RAG, Indexing](https://blog.langchain.com/deconstructing-rag/))
 
-> Source: [LangChain — Deconstructing RAG / Chunk Size](https://blog.langchain.com/deconstructing-rag/)
+2. **Cosine similarity blurs exact tokens.** Embedding models encode *meaning*, not verbatim strings — a useful property for natural language that actively hurts retrieval of structured technical content. A query for `ConnectSessionCreate` or `GET /hris/employees` may rank a semantically *nearby* but wrong endpoint above the literal match, because the embedding space merges similar concepts. The LLM is then synthesising an answer from the wrong document.
 
-### 2. Hybrid Search (Dense + Sparse)
-**Current drawback:** Pure cosine similarity over embeddings blurs exact tokens. A query for `GET /hris/employees` might rank a semantically similar but unrelated endpoint higher than the exact match because embeddings capture meaning, not verbatim strings.
+3. **Chunking forces over-retrieval to compensate.** Because each chunk is partial, the system must retrieve multiple chunks (controlled by `k_neighbors`) and hope they collectively form a complete picture. This fills the context window with redundant or tangentially-related fragments, increasing the chance of hallucination and diluting the signal that was actually relevant.
 
-**How it helps:** BM25 scores documents by exact term frequency, so `/hris/employees` or `ConnectSessionCreate` score highest when those tokens appear literally. Merging BM25 and vector results via RRF means both strategies vote, and the true best result rises to the top regardless of whether the match is semantic or lexical.
+**How BM25 fixes all three:**
 
-Add BM25 keyword search alongside vector search, then merge results with **Reciprocal Rank Fusion (RRF)**. This catches exact matches like endpoint paths or HTTP method names that cosine similarity misses.
+BM25 (Okapi BM25) is a probabilistic ranking function that scores documents by term frequency (TF) and inverse document frequency (IDF) — no embedding model, no vector DB required. ([Robertson & Zaragoza, 2009](https://dl.acm.org/doi/10.1561/1500000019); [Elasticsearch BM25 reference](https://www.elastic.co/blog/practical-bm25-part-2-the-bm25-algorithm-and-its-variables))
 
-> Sources: [LangChain RAG Fusion](https://github.com/langchain-ai/langchain/blob/master/cookbook/rag_fusion.ipynb) · [Chroma hybrid search](https://docs.trychroma.com)
+- **Response accuracy improves because documents are indexed whole, not chunked.** Each OpenAPI operation (path + method + parameters + request body + response schemas) is stored as one document. When retrieved, the LLM receives the *complete contract* for an endpoint, not a fragment — so answers about required fields, response shapes, and error codes are grounded in full context.
 
-### 3. Query Rewriting + Expansion
-**Current drawback:** User queries go directly into vector search. Vague or conversational queries (e.g. "how do I add a person?") don't match the technical language in the OpenAPI docs (`POST /hris/employees`), causing retrieval misses even when the answer exists.
+- **Exact token recall is deterministic.** BM25 ranks by how often query terms literally appear in a document, weighted by how rare those terms are across the corpus (IDF). A query for `ConnectSessionCreate` scores the exact schema document at the top — not a semantically adjacent one. This is particularly effective for OpenAPI content, where users naturally query with exact endpoint paths, HTTP methods, and schema names. ([Wikipedia — Okapi BM25](https://en.wikipedia.org/wiki/Okapi_BM25))
 
-**How it helps:** Rewriting translates natural language into retrieval-friendly technical terms before the search runs, closing the vocabulary gap. Expansion generates multiple phrasings of the same intent so a single vague query triggers several targeted retrievals, dramatically increasing recall.
+- **Context quality increases because retrieval precision is higher.** With whole-document retrieval and exact matching, a single returned document typically contains the full answer. The LLM is not reasoning across several partial fragments — reducing hallucination caused by incomplete or conflicting context in the prompt.
 
-Before retrieval, use the LLM to:
-- **Rewrite** the user query into cleaner retrieval language (Rewrite-Retrieve-Read)
-- **Expand** it into 2–3 sub-questions to cover multiple facets (multi-query retriever)
+- **No embedding latency or cost.** BM25 is a statistical function over an inverted index. There is zero inference cost at index time and zero model call at query time — making it faster and cheaper than the current embed-then-query pipeline.
 
-> Source: [LangChain — Query Transformations](https://blog.langchain.com/query-transformations/)
+Instead of embedding every chunk, build a **page-level inverted index** using BM25 (via `rank_bm25` or Elasticsearch / Typesense), where each document is one full OpenAPI operation object. Retrieve by keyword, then pass the complete document directly to the LLM.
 
-### 4. Re-ranking
-**Current drawback:** Chroma returns the top-k chunks by embedding distance alone. Distance is a shallow proxy for relevance — a chunk can be close in embedding space but still not contain the answer. The top result is often noisy.
+**Pros:** complete context per retrieved document, deterministic ranking, exact token matching, no embedding cost or latency, no chunking step, zero vector DB required  
+**Cons:** no semantic generalisation — synonyms and paraphrases that share no tokens with the document will miss (e.g. "how do I add a person?" won't match `POST /hris/employees`); can be partially mitigated by LangGraph retry with rewritten queries (Improvement #2)
 
-**How it helps:** A cross-encoder reads the query and each candidate chunk together (not as independent embeddings), producing a much more accurate relevance score. Reordering chunks before synthesis ensures the most directly useful one appears first in the prompt, reducing hallucination caused by noisy leading context.
+> Sources:
+> - Robertson, S. & Zaragoza, H. (2009). *The Probabilistic Relevance Framework: BM25 and Beyond*. Foundations and Trends in Information Retrieval, 3(4), 333–389. <https://dl.acm.org/doi/10.1561/1500000019>
+> - Connelly, S. (2018). *Practical BM25 — Part 2: The BM25 Algorithm and its Variables*. Elastic Blog. <https://www.elastic.co/blog/practical-bm25-part-2-the-bm25-algorithm-and-its-variables>
+> - LangChain. *BM25 Retriever*. <https://python.langchain.com/docs/integrations/retrievers/bm25/>
+> - LangChain. *Deconstructing RAG — Indexing / Chunk Size*. <https://blog.langchain.com/deconstructing-rag/>
+> - Wikipedia. *Okapi BM25*. <https://en.wikipedia.org/wiki/Okapi_BM25>
 
-After retrieval, apply a cross-encoder re-ranker (e.g. Cohere ReRank or a local `cross-encoder/ms-marco` model) to re-score and reorder the `k` chunks before synthesis. Significantly improves precision at low extra cost.
-
-> Source: [LangChain — Post-Processing / Re-ranking](https://blog.langchain.com/deconstructing-rag/)
-
-### 5. Metadata Filtering via Self-Query
-**Current drawback:** Every query searches across all 7 APIs and all component types. A question about HRIS endpoints will retrieve schema chunks from CRM or ATS, adding noise and consuming context window tokens with irrelevant content.
-
-**How it helps:** The self-query retriever parses the user's question to extract structural intent (e.g. "HRIS", "GET") and converts it into a metadata pre-filter before vector search runs. This constrains the search space to only the relevant API and method, drastically reducing noise in the retrieved context.
-
-Tag each chunk with structured metadata (`api: hris`, `method: GET`, `path: /employees`) at index time. Use a **self-query retriever** so questions like "what HRIS endpoints return a list?" pre-filter by metadata before vector search.
-
-> Source: [LangChain — Text-to-metadata filters](https://blog.langchain.com/deconstructing-rag/)
-
-### 6. Vectorless RAG — Page-Level Index (BM25 / Full-Text)
-**Current drawback:** Embedding models add latency and cost at both index and query time. For structured content like OpenAPI specs, where queries often contain exact tokens (`/employees`, `GET`, `ConnectSessionCreate`), embedding-based retrieval is overkill and introduces unnecessary semantic blurring.
-
-**How it helps:** BM25 indexes raw tokens without any model inference. A query for `ConnectSessionCreate` returns the exact schema document in milliseconds at zero model cost — particularly effective since developers typically reference exact schema names, endpoint paths, or operation IDs rather than paraphrasing them.
-
-Instead of embedding every chunk, build a **page-level inverted index** using BM25 (or Elasticsearch / Typesense). Retrieve full OpenAPI path objects by keyword, then pass them directly to the LLM. No embedding model needed.
-
-**Pros:** no embedding cost or latency, deterministic ranking, zero vector DB required, great for structured/code-like content  
-**Cons:** no semantic generalisation (synonyms, paraphrases missed), needs separate BM25 store alongside ChromaDB if used hybrid
-
-> Sources: [BM25 overview — Elastic](https://www.elastic.co/blog/practical-bm25-part-2-the-bm25-algorithm-and-its-variables) · [LangChain BM25 retriever](https://python.langchain.com/docs/integrations/retrievers/bm25/)
-
-### 7. LangGraph Agentic RAG
+### 2. LangGraph Agentic RAG
 **Current drawback:** The pipeline is a fixed linear sequence: retrieve → prompt → generate. If retrieval returns nothing useful (distance threshold filters all chunks), the system immediately falls back to "I don't know" with no retry. There is no mechanism to rephrase the query or fetch from a different source.
 
 **How it helps:** The LangGraph state machine adds a relevance-grading node after retrieval. If chunks score below threshold, the graph loops back and generates a rewritten query before retrying — mimicking how a researcher rephrases and searches again. Hard-coded fallbacks are replaced by intelligent, observable retry logic.
@@ -91,7 +64,7 @@ Nodes can decide whether retrieved context is sufficient and loop back to retrie
 
 > Source: [LangGraph Agentic RAG tutorial](https://langchain-ai.github.io/langgraph/tutorials/rag/langgraph_agentic_rag/)
 
-### 8. LangSmith Evaluation Pipeline
+### 3. LangSmith Evaluation Pipeline
 **Current drawback:** The `/evaluate` endpoint scores individual queries in isolation using LLM-as-judge, but scores are never tracked over time. There is no way to know if a prompt change improved or regressed quality, no production monitoring, and no human review workflow for bad outputs.
 
 **How it helps:** LangSmith persists every score against a versioned dataset, making quality trends visible across experiments. Offline evals can gate PRs automatically (regression = block merge). Online evaluators catch production degradation in real-time at configurable sampling rates. Annotation queues close the loop by converting bad production traces into labelled examples for future evals.
@@ -138,9 +111,9 @@ For comparing chunking/prompt strategies, use **pairwise annotation queues** to 
 ## Recommended Roadmap
 
 ```
-Phase 1 (quick wins)   →  Schema-aware chunking + metadata tags + re-ranking
-Phase 2 (quality)      →  Hybrid search + query rewriting
-Phase 3 (production)   →  LangGraph orchestration + LangSmith eval pipeline
+Phase 1  →  BM25 / full-text index
+Phase 2  →  LangGraph for retry/rewrite logic on low-confidence retrievals
+Phase 3  →  LangSmith eval pipeline
 ```
 
 ---

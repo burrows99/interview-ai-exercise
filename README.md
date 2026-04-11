@@ -61,6 +61,28 @@ Have a look in `ai_exercise/constants.py`. Then check out the server routes in `
 - Other types of models which may be relevant
 - How else could you store the data for better retrieval?
 
+## Evaluation Metrics
+
+The `/evaluate` endpoint scores each response using three **reference-free, LLM-as-judge** metrics (all scores are 0–1, higher is better). They were originally defined by the RAGAS framework and are widely used for production RAG evaluation.
+
+| Metric | What it measures | Why it matters |
+|---|---|---|
+| **Faithfulness** | Every claim in the answer is grounded in the retrieved context — no hallucinations | Ensures the model isn't introducing facts outside the docs |
+| **Answer Relevancy** | The answer actually addresses the question asked | Catches responses that are on-topic but evasive or incomplete |
+| **Context Relevancy** | The retrieved chunks are relevant to the question | Measures retrieval quality independently of generation |
+
+### Method
+
+Each metric is scored by a second LLM call ("LLM-as-judge"). The model is given a strict prompt and asked to return a single float. This approach requires no labelled ground truth and scales to arbitrary question sets.
+
+### Sources
+
+- **RAGAS** — the framework that defined these three metrics:  
+  Es, S., James, J., Espinosa-Anke, L., & Schockaert, S. (2023). *RAGAS: Automated Evaluation of Retrieval Augmented Generation*. arXiv:2309.15217. <https://arxiv.org/abs/2309.15217>
+
+- **LLM-as-judge** — the general paradigm of using an LLM to evaluate another LLM's output:  
+  Zheng, L., et al. (2023). *Judging LLM-as-a-Judge with MT-Bench and Chatbot Arena*. arXiv:2306.05685. <https://arxiv.org/abs/2306.05685>
+
 ## Improvements
 
 See [IMPROVEMENTS.md](IMPROVEMENTS.md) for a detailed write-up of current limitations and what would be done next in a production-ready version.
