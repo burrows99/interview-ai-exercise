@@ -1,18 +1,15 @@
 """FastAPI app creation, main API routes."""
 
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from langchain_chroma import Chroma
 
 from ai_exercise.constants import SETTINGS, chroma_client, llm_provider
-from ai_exercise.evaluation.evaluator import evaluate
-from ai_exercise.llm.completions import create_prompt
-from ai_exercise.loading.document_loader import (
-    add_documents,
-    build_docs,
-    get_json_data,
-    split_docs,
-)
+from ai_exercise.evaluation.evaluator import RAGEvaluator
+from ai_exercise.llm.rag_chat_prompts import RAGChatPrompts
+from ai_exercise.loading.openapi_spec_loader import build_and_add_documents
 from ai_exercise.models import (
     ChatOutput,
     ChatQuery,
@@ -21,30 +18,33 @@ from ai_exercise.models import (
     HealthRouteOutput,
     LoadDocumentsOutput,
 )
-from ai_exercise.retrieval.retrieval import get_relevant_chunks
-from ai_exercise.retrieval.vector_store import create_collection, reset_collection
+from ai_exercise.retrieval.vector_store import ChromaVectorStore
 
-collection = create_collection(
-    chroma_client, llm_provider.embedding_function, SETTINGS.collection_name
-)
+logger = logging.getLogger(__name__)
+
+logging.basicConfig(level=logging.INFO)
+
+vector_store: Chroma | None = None
+
+
+def _reload_documents() -> Chroma:
+    """Embed fresh OpenAPI docs into a new vector store and return it."""
+    logger.info("Resetting vector store and reloading documents...")
+    store = ChromaVectorStore(
+        chroma_client, llm_provider.embeddings, SETTINGS.collection_name
+    ).reset()
+    count = build_and_add_documents(store)
+    logger.info("Done. %d documents in vector store.", count)
+    return store
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Load all documents into the vector store on startup."""
-    print("Loading documents from StackOne OpenAPI specs...")
-    json_data = get_json_data()
-    print(f"Fetched {len(json_data)} specs. Building docs...")
-    documents = build_docs(json_data)
-    print(f"Built {len(documents)} documents. Splitting...")
-    documents = split_docs(documents)
-    print(f"Split into {len(documents)} chunks. Resetting collection and adding...")
-    global collection
-    collection = reset_collection(
-        chroma_client, llm_provider.embedding_function, SETTINGS.collection_name
-    )
-    add_documents(collection, documents)
-    print(f"Done. Number of documents in collection: {collection.count()}")
+    logger.info("Starting up...")
+    global vector_store
+    vector_store = _reload_documents()
+    logger.info("Startup complete.")
     yield
 
 
@@ -59,59 +59,53 @@ def health_check_route() -> HealthRouteOutput:
 
 @app.get("/load")
 async def load_docs_route() -> LoadDocumentsOutput:
-    """Route to load documents into vector store."""
-    json_data = get_json_data()
-    documents = build_docs(json_data)
-
-    # split docs
-    documents = split_docs(documents)
-
-    # load documents into vector store
-    add_documents(collection, documents)
-
-    # check the number of documents in the collection
-    print(f"Number of documents in collection: {collection.count()}")
-
+    """Reload documents into the vector store."""
+    logger.info("Manual document reload triggered.")
+    global vector_store
+    vector_store = _reload_documents()
     return LoadDocumentsOutput(status="ok")
 
 
 @app.post("/chat")
 def chat_route(chat_query: ChatQuery) -> ChatOutput:
     """Chat route to chat with the API."""
-    # Get relevant chunks from the collection
-    relevant_chunks = get_relevant_chunks(
-        collection=collection, query=chat_query.query, k=SETTINGS.k_neighbors
+    if vector_store is None:
+        raise RuntimeError("Vector store not initialised")
+    logger.info("Chat query: %s", chat_query.query)
+    retriever = vector_store.as_retriever(
+        search_type="similarity_score_threshold",
+        search_kwargs={"k": SETTINGS.k_neighbors, "score_threshold": SETTINGS.score_threshold},
     )
-
-    # Create prompt with context
-    prompt = create_prompt(query=chat_query.query, context=relevant_chunks)
-
-    print(f"Prompt: {prompt}")
-
-    # Get completion from LLM provider
+    relevant_chunks = [doc.page_content for doc in retriever.invoke(chat_query.query)]
+    logger.debug("Retrieved %d chunks.", len(relevant_chunks))
+    prompt = RAGChatPrompts.answer(query=chat_query.query, context=relevant_chunks)
+    logger.debug("Prompt: %s", prompt)
     result = llm_provider.get_completion(prompt)
-
     return ChatOutput(message=result)
 
 
 @app.post("/evaluate")
 def evaluate_route(eval_query: EvaluateQuery) -> EvaluationResult:
     """Run the RAG pipeline and evaluate the result with LLM-as-judge metrics."""
-    relevant_chunks = get_relevant_chunks(
-        collection=collection, query=eval_query.query, k=SETTINGS.k_neighbors
+    if vector_store is None:
+        raise RuntimeError("Vector store not initialised")
+    logger.info("Evaluate query: %s", eval_query.query)
+    retriever = vector_store.as_retriever(
+        search_type="similarity_score_threshold",
+        search_kwargs={"k": SETTINGS.k_neighbors, "score_threshold": SETTINGS.score_threshold},
     )
-
-    prompt = create_prompt(query=eval_query.query, context=relevant_chunks)
+    relevant_chunks = [doc.page_content for doc in retriever.invoke(eval_query.query)]
+    logger.debug("Retrieved %d chunks.", len(relevant_chunks))
+    prompt = RAGChatPrompts.answer(query=eval_query.query, context=relevant_chunks)
     answer = llm_provider.get_completion(prompt)
 
-    scores = evaluate(
-        llm=llm_provider,
+    scores = RAGEvaluator(llm_provider).evaluate(
         query=eval_query.query,
         context=relevant_chunks,
         answer=answer,
     )
 
-    print(f"Evaluation scores for '{eval_query.query}': {scores}")
+    logger.info("Evaluation scores for '%s': %s", eval_query.query, scores)
 
     return EvaluationResult(
         query=eval_query.query,
@@ -123,4 +117,4 @@ def evaluate_route(eval_query: EvaluateQuery) -> EvaluationResult:
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run("main:app", host="0.0.0.0", port=80, reload=True)
+    uvicorn.run("ai_exercise.main:app", host="0.0.0.0", port=80, reload=True)

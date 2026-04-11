@@ -4,7 +4,7 @@ import chromadb
 from pydantic import SecretStr
 from pydantic_settings import BaseSettings
 
-from ai_exercise.llm.provider import LLMProvider, create_provider
+from ai_exercise.llm.providers import LLMProvider, create_provider
 
 
 class Settings(BaseSettings):
@@ -39,7 +39,7 @@ class Settings(BaseSettings):
     collection_name: str = "documents"
     chunk_size: int = 1000
     k_neighbors: int = 5
-    distance_threshold: float = 0.7  # cosine distance; 0=identical, 1=orthogonal
+    score_threshold: float = 0.5  # relevance score; 0=unrelated, 1=identical
 
     # All StackOne OpenAPI specs to load
     docs_urls: list[str] = [

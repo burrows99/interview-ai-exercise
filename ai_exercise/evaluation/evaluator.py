@@ -6,107 +6,66 @@ Three reference-free metrics (all 0-1, higher is better):
 - context_relevancy:  the retrieved chunks are relevant to the question
 """
 
-from ai_exercise.llm.provider import LLMProvider
+import logging
+
+from ai_exercise.evaluation.rag_evaluator_prompts import RAGEvaluatorPrompts
+from ai_exercise.llm.providers import LLMProvider
+
+logger = logging.getLogger(__name__)
 
 
-def _parse_score(raw: str) -> float:
-    """Extract the first float found in a model response, clamped to [0, 1]."""
-    for token in raw.replace(",", ".").split():
-        try:
-            value = float(token.strip("()."))
-            return max(0.0, min(1.0, value))
-        except ValueError:
-            continue
-    return 0.0
+class RAGEvaluator:
+    """LLM-as-judge evaluator for RAG pipelines."""
 
+    def __init__(self, llm: LLMProvider) -> None:
+        """Initialise the evaluator with an LLM provider."""
+        self._llm = llm
+        self._prompts = RAGEvaluatorPrompts()
 
-def score_faithfulness(
-    llm: LLMProvider, query: str, context: list[str], answer: str
-) -> float:
-    """Score whether every claim in *answer* is supported by *context* (0-1)."""
-    if not context:
-        # No context was retrieved; faithfulness is undefined — return 0
+    # --- Utilities ---
+
+    @staticmethod
+    def _parse_score(raw: str) -> float:
+        """Extract the first float found in a model response, clamped to [0, 1]."""
+        for token in raw.replace(",", ".").split():
+            try:
+                value = float(token.strip("()."))
+                return max(0.0, min(1.0, value))
+            except ValueError:
+                continue
         return 0.0
 
-    context_str = "\n\n".join(context)
-    prompt = f"""You are a strict evaluation assistant.
+    # --- Scoring methods ---
 
-Given a question, retrieved context, and an answer, score how faithfully the answer
-is grounded in the context. A faithful answer only makes claims that are directly
-supported by the context and does not introduce outside information.
+    def score_faithfulness(
+        self, query: str, context: list[str], answer: str
+    ) -> float:
+        """Score whether every claim in *answer* is supported by *context* (0-1)."""
+        if not context:
+            return 0.0
+        prompt = self._prompts.faithfulness(query, "\n\n".join(context), answer)
+        return self._parse_score(self._llm.get_completion(prompt))
 
-Question: {query}
+    def score_answer_relevancy(self, query: str, answer: str) -> float:
+        """Score whether *answer* actually addresses *query* (0-1)."""
+        prompt = self._prompts.answer_relevancy(query, answer)
+        return self._parse_score(self._llm.get_completion(prompt))
 
-Context:
-{context_str}
+    def score_context_relevancy(self, query: str, context: list[str]) -> float:
+        """Score what proportion of retrieved context is relevant to *query* (0-1)."""
+        if not context:
+            return 0.0
+        prompt = self._prompts.context_relevancy(query, "\n\n".join(context))
+        return self._parse_score(self._llm.get_completion(prompt))
 
-Answer: {answer}
-
-Score faithfulness from 0.0 to 1.0 where:
-  1.0 = every claim in the answer is explicitly supported by the context
-  0.0 = the answer introduces facts not present in the context
-
-Respond with a single float and nothing else."""
-
-    raw = llm.get_completion(prompt)
-    return _parse_score(raw)
-
-
-def score_answer_relevancy(llm: LLMProvider, query: str, answer: str) -> float:
-    """Score whether *answer* actually addresses *query* (0-1)."""
-    prompt = f"""You are a strict evaluation assistant.
-
-Given a question and an answer, score how well the answer addresses the question.
-
-Question: {query}
-
-Answer: {answer}
-
-Score answer relevancy from 0.0 to 1.0 where:
-  1.0 = the answer completely and directly addresses the question
-  0.0 = the answer is entirely irrelevant to the question
-
-Respond with a single float and nothing else."""
-
-    raw = llm.get_completion(prompt)
-    return _parse_score(raw)
-
-
-def score_context_relevancy(llm: LLMProvider, query: str, context: list[str]) -> float:
-    """Score what proportion of the retrieved context is relevant to *query* (0-1)."""
-    if not context:
-        return 0.0
-
-    context_str = "\n\n".join(context)
-    prompt = f"""You are a strict evaluation assistant.
-
-Given a question and a set of retrieved context chunks, score how relevant the
-retrieved context is to answering the question.
-
-Question: {query}
-
-Retrieved Context:
-{context_str}
-
-Score context relevancy from 0.0 to 1.0 where:
-  1.0 = all retrieved chunks are highly relevant to answering the question
-  0.0 = none of the retrieved chunks are relevant to the question
-
-Respond with a single float and nothing else."""
-
-    raw = llm.get_completion(prompt)
-    return _parse_score(raw)
-
-
-def evaluate(
-    llm: LLMProvider,
-    query: str,
-    context: list[str],
-    answer: str,
-) -> dict[str, float]:
-    """Run all three metrics and return a scores dict."""
-    return {
-        "faithfulness": score_faithfulness(llm, query, context, answer),
-        "answer_relevancy": score_answer_relevancy(llm, query, answer),
-        "context_relevancy": score_context_relevancy(llm, query, context),
-    }
+    def evaluate(
+        self, query: str, context: list[str], answer: str
+    ) -> dict[str, float]:
+        """Run all three metrics and return a scores dict."""
+        scores = {
+            "faithfulness": self.score_faithfulness(query, context, answer),
+            "answer_relevancy": self.score_answer_relevancy(query, answer),
+            "context_relevancy": self.score_context_relevancy(query, context),
+        }
+        logger.debug("Scores: %s", scores)
+        return scores
