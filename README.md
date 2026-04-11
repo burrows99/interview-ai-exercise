@@ -2,79 +2,43 @@
 
 > simple RAG example
 
-## Project requirements
+## Requirements
 
-### uv
+- [Docker Engine](https://docs.docker.com/engine/install/)
 
-Install [uv](https://docs.astral.sh/uv/getting-started/installation/) to install and manage python dependencies.
+## Hardware
 
-### Docker Engine (optional)
+The default setup runs `llama3.2` (3B, ~2GB) and `nomic-embed-text` via Ollama, which fits comfortably within a standard M3 MacBook Pro with 16GB RAM.
 
-Install [Docker Engine](https://docs.docker.com/engine/install/) to build and run the API's Docker image locally.
+If you'd prefer to use OpenAI instead (e.g. for a more capable model or on machines with less RAM), set the following in `.env`:
 
-## Installation
-
-```bash
-make install
+```env
+PROVIDER=openai
+OPENAI_API_KEY=<your-key>
 ```
 
-## API
+The `ollama` container will still start but won't be used.
 
-The project includes an API built with [FastAPI](https://fastapi.tiangolo.com/). Its code can be found at `src/api`.
+## Setup
 
-The API is containerized using a [Docker](https://docs.docker.com/get-started/) image, built from the `Dockerfile` and `docker-compose.yml` at the root. This is optional, you can also run the API without docker.
-
-### Environment Variables
-
-Copy .env_example to .env and fill in the values.
-
-### Build and start the API
-
-To build and start the API, use the following Makefile command:
+Start everything (Ollama + model downloads + API):
 
 ```bash
-make dev-api
+docker-compose up -d
 ```
 
-you can also use `make start-api` to start the API using Docker.
+That's it. The API and Ollama container will start, models will be pulled automatically, and the API will be ready once models are loaded.
 
-## Frontend
+## Usage
 
-The project includes a frontend built with [Streamlit](https://streamlit.io/). Its code can be found at `demo`.
+Open [http://localhost/docs](http://localhost/docs) in your browser to access the interactive API docs.
 
-Run the frontend with:
+- Use the `/chat` endpoint to query the RAG system
+- Use the `/evaluate` endpoint to evaluate retrieval quality
 
-```bash
-make start-app
-```
+## Get Started
 
-## Testing
-
-To run unit tests, run `pytest` with:
-
-```bash
-make test
-```
-
-## Formatting and static analysis
-
-There is some preset up formatting and static analysis tools to help you write clean code. check the make file for more details.
-
-```bash
-make lint
-```
-
-```bash
-make format
-```
-
-```bash
-make typecheck
-```
-
-# Get Started
-
-Have a look in `ai_exercise/constants.py`. Then check out the server routes in `ai_exercise/main.py`. 
+Have a look in `ai_exercise/constants.py`. Then check out the server routes in `ai_exercise/main.py`.
 
 1. Load some documents by calling the `/load` endpoint. Does the system work as intended? Are there any issues?
 
@@ -85,3 +49,7 @@ Have a look in `ai_exercise/constants.py`. Then check out the server routes in `
 - Try different embeddings models
 - Other types of models which may be relevant
 - How else could you store the data for better retrieval?
+
+## Improvements
+
+See [IMPROVEMENTS.md](IMPROVEMENTS.md) for a detailed write-up of current limitations and what would be done next in a production-ready version.
